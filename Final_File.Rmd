@@ -1,0 +1,1773 @@
+---
+title: "Analytics Project - Wellbeing Data Set"
+subtitle: "C755: Analytics & Decision-Making in Healthcare"
+author:
+  name: Tahir Abdulrehman, Nancy Du, Tony Nguyen, Tirth Raval
+  affiliation: C755 | DeGroote School of Business, McMaster University
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: 
+    number_sections: FALSE
+    code_folding: hide
+    toc: yes
+    toc_float: 
+      toc_collapsed: true
+    theme: readable
+    warning: false
+---
+
+
+# Load the Libraries 
+
+```{r}
+pacman::p_load(psych, xray , ggplot2, texreg, DT, wrapr, dplyr,
+               sjmisc, sjlabelled, sjstats, sjPlot, tidyr,ggpubr,corrplot,
+               knitr, kableExtra, captioner, car, excelR,ggcorrplot,Rmisc,sjmisc,funModeling,
+               forcats, hrbrthemes,tidyverse,finalfit,patchwork,GGally,broom,caret,matrixTests,PerformanceAnalytics)
+
+
+
+```  
+
+
+# Connect the Dataset
+```{r}
+df = read.csv("Well_being_Health_Behavior_Environmental_Fact.csv")
+```
+
+
+# First Glance of the Data set
+
+## Head View of the Data Set
+```{r}
+pacman::p_load("DT")
+head(x = df,n=5) %>% datatable(rownames=TRUE,filter = "top", options=list(pageLength = 10, scrollX=T))
+```
+
+
+## Tail View of the Dataset
+
+```{r}
+pacman::p_load("DT")
+tail(x = df,n=5) %>% datatable(rownames=TRUE,filter = "top", options=list(pageLength = 10, scrollX=T))
+```
+
+## Head Tail View of the DataSet
+```{r}
+pacman::p_load("DT","psych")
+headTail(x = df,top = 4,bottom = 4) %>% datatable(rownames=TRUE,filter = "top", options=list(pageLength = 10, scrollX=T,scrollY=T))
+```
+
+
+
+# Scrutinizing the Data
+
+## 3S of the Dataset
+
+### Size of the Dataset
+```{r}
+cat("The Dataset (df) contains ",nrow(df)," records and", ncol(df)," Columns or variables.")
+```
+
+### Structure of the Data Set
+```{r}
+str(df)
+```
+<br><br><br>
+
+<h3> Interpretation from the Structure of the Dataset : </h3> <br><br>
+
+1. The Dataset originally has only numerical and integer values<br>
+
+2. <b>Our Target variable "wellbeing" is also an integer datatype. </b>However, we expect that into a category as we conceive it as classification thing of Wellbeing in the form of category as (yes or no) or (good or bad).
+<br>
+<mark style ="background-color:#faed27">
+2.Action : Convert "Wellbeing" into a factor </mark><br>
+
+
+3. It is also evident by looking at the structure of the dataset that <b>several other variables like (Asthma, HealthInsurance, CVD, Diabetes, HeavyDrinker) to name a few are supposed to be categories or factors but infact they are integers.</b><br>
+<mark style ="background-color:#faed27">
+3.Action : Convert those set of Categorical Variables as Factors from Integers.</mark>
+
+4. Some set of variables are of the perfect type for example - Age is an integer and is supposed to be one. PM2.5 which represents the Fine Particle Matter in micrograms/cubic meter is actually a numerical data in a continous form.
+
+5. Some Variables such as BMI and income were expected to be continuous. However, they are ordinal values mentioned in integers which is a point of concern
+
+<mark style ="background-color:#faed27">
+5. Action : Convert those variables into probable factors whenver needed in Analytics
+</mark>
+
+
+
+### Summary of the DataSet
+
+```{r}
+summary(df)
+```
+
+<br><br><br>
+
+<h3> Interpretation from the Structure of the Dataset : </h3> <br><br>
+
+1. The Summary provides a good support of evidence for those points of concerns expressed earlier in the structure of the dataset. <b>It describes the standard statistics for those variables which are supposed to be categorical variables either ordinal or nominal </b>
+<br> 
+2. <mark style ="background-color:#faed27"> The Summary indicates something interesting that many records and most variables in the dataset contains null values.  </mark><br>
+
+2. <mark style ="background-color:#faed27"> Action : Either Remove or Impute Null Values ensuring that in each of the case does not statistically significantly alters the dataset.</mark><br>
+
+3. The Good part that the summary iterates is that the almost all variables are within their supposed range. For an instance, no age record is negative, No PM2.5 less than 0, Household income min is not negative and so on. This is a sigh of relief.
+
+Below are some boxplots for concerning continuous and discrete variables demonstrating their ranges with outliers
+
+
+## Boxplots For Range Check and Outlier Detection
+
+
+### Age Boxplot
+```{r echo=FALSE}
+boxplot(df["age"],main = "age Box Plot", xlab = "Age",horizontal = TRUE)
+```
+
+
+This boxplot for age seems very healthy.
+
+
+### Premature Mortality Boxplot
+```{r}
+boxplot(df["PrematureMortality"],main = "Premature Mortality Box Plot", xlab = "Premature Mortality",horizontal = TRUE)
+```
+
+The distribution of the Premature Mortality have some outliers in the right ends shows that it is skewed to the right.
+
+#### Checking Distribution of Premature Mortality
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=PrematureMortality)) + geom_density()+
+ ggtitle ("Premature Mortality Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+
+
+
+From the above test, we could possibly reject the null hypothesis that the distribution of premature Mortality is normal. However through Central Limit Theorem I shall prove the normality.
+
+```{r}
+s30 <- c()
+s50 <- c()
+s500 <- c()
+n =396000
+for ( i in 1:n){
+s30[i] = mean(sample(df$PrematureMortality,30, replace = TRUE))
+s50[i] = mean(sample(df$PrematureMortality,50, replace = TRUE))
+s500[i] = mean(sample(df$PrematureMortality,500, replace = TRUE))
+}
+par(mfrow=c(1,3))
+hist(s30, col ="lightblue",main="Sample size=30",xlab ="Premature Mortality")
+abline(v = mean(s30), col = "red")
+
+hist(s50, col ="lightgreen", main="Sample size=50",xlab ="Premature Mortality")
+abline(v = mean(s50), col = "red")
+
+hist(s500, col ="orange",main="Sample size=500",xlab ="Premature Mortality")
+abline(v = mean(s500), col = "red")
+
+```
+
+<h3> Interpretation </h3>
+
+We could clearly see a bell curve with Central Limit Theorem and prove that with sufficiently large sample size any distribution that does not seem to be normally distributed gets normally distributed using Central Limit Theorem or Bootstrapping.
+
+
+### Household Income Boxplot
+```{r}
+boxplot(df["HouseholdIncome"],main = "Household Income Box Plot", xlab = "Household Income",horizontal = TRUE)
+```
+The distribution of the Household Income have some outliers in the right ends shows that it is skewed to the right.
+
+#### Checking Distribution of Household Income
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=HouseholdIncome)) + geom_density()+
+ ggtitle ("Household Income Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+<br>
+
+<mark style ="background-color:#faed27"> So from now on we shall not Check with the CLT or Bootstrapping for the normal distribution of any variable rather assume that the distribution will be normal whenever viewed from the lens of CLT or Bootstrapping.
+</mark>
+
+### Unemployment Rate   Boxplot
+```{r}
+boxplot(df["UnemploymentRate"],main = "Unemployment Rate   Box Plot", xlab = "Unemployment Rate  ",horizontal = TRUE)
+```
+The distribution of the Unemployment Rate have some outliers on both ends more probably on the right which signifies that it is skewed more to the right.
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=UnemploymentRate)) + geom_density()+
+ ggtitle ("Unemployment Rate Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+
+
+### High School Rate Boxplot
+```{r}
+boxplot(df["HighSchoolRate"],main = "High School Rate Box Plot", xlab = "High School Rate",horizontal = TRUE)
+```
+The distribution of the High School Rate have some outliers on left ends which signifies that it is skewed more to the left.
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=HighSchoolRate)) + geom_density()+
+ ggtitle ("High School Rate Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+### Some College Rate Boxplot
+```{r}
+boxplot(df["SomeCollegeRate"],main = "Some College Rate Box Plot", xlab = "Some College Rate  ",horizontal = TRUE)
+```
+The distribution of the Some College Rate have some outliers on left ends which signifies that it is skewed more to the left.
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=SomeCollegeRate)) + geom_density()+
+ ggtitle ("Some College Rate Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+
+### Access To Recreational Facility Boxplot
+```{r}
+boxplot(df["AccessToRecFacility"],main = "Access To Recreational Facility Box Plot", xlab = "Access To Recreational Facility  ",horizontal = TRUE)
+```
+The distribution of the Access To Recreational Facility have some outliers on right ends which signifies that it is skewed more to the left.
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=AccessToRecFacility)) + geom_density()+
+ ggtitle ("Access To Recreational Facility Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+
+### Fast Food Percentage Boxplot
+```{r}
+boxplot(df["FastFoodPercentage"],main = "Fast Food Percentage Box Plot", xlab = "Fast Food Percentage  ",horizontal = TRUE)
+```
+The distribution of the Fast Food Percentage have some outliers on both ends 
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=FastFoodPercentage)) + geom_density()+
+ ggtitle ("Fast Food Percentage Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution seems normal with multiple peaks and higher kurtosis
+
+
+
+### PM2.5 Boxplot
+```{r}
+boxplot(df["PM2.5"],main = "PM2.5 Box Plot", xlab = "PM2.5  ",horizontal = TRUE)
+```
+The distribution of the PM2.5 have some outliers on left ends which signifies that it is skewed more to the left.
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=PM2.5)) + geom_density()+
+ ggtitle ("PM2.5 Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+### Population Density Boxplot
+```{r}
+boxplot(df["PopulationDensity"],main = "Population Density Box Plot", xlab = "Population Density  ",horizontal = TRUE)
+```
+The distribution of the Population Density have some outliers on right ends which signifies that it is skewed more to the right
+
+#### Checking Distribution of Unemployment Rate 
+
+```{r}
+pacman::p_load("ggplot2")
+ggplot(data=df,aes(x=PopulationDensity)) + geom_density()+
+ ggtitle ("Population Density Density Plot") +
+theme (axis.title.x=element_text (size=16, face="bold", colour="blue")) +
+theme (axis.text.x=element_text (size=14 ) ) 
+```
+
+The distribution does not seems normal but I suspect that when we apply the CLT or Bootstrapping Normality would be proven.
+
+
+### Interpretation of Boxplots for every variable
+<br><br>
+As far as continuous variables are concerned their distribution is quite questionable however, with Central Limit Theorem it could be deduced that they are representative of their population. 
+<br>
+Also the boxplot help us indicates that the variables are in their expected range and have acceptable set of outliers and shall help us validate the min, max, median and range of those variables.
+
+
+
+## Inspect the presence and purview of null values
+
+
+### Checking the count of null values by Variable
+
+```{r}
+apply(apply(df,2,is.na),2,sum)
+```
+
+### Plotting the null values by variable
+
+```{r}
+library(tidyr)
+pacman::p_load(inspectdf)
+df %>% inspect_na %>% show_plot
+```
+
+
+
+### Check the rows with null values
+
+```{r}
+sum(apply(df,1,anyNA))
+```
+```{r}
+cat("There are around ",sum(apply(df,1,anyNA)), " null records in the dataset of in total", nrow(df),"records \n","In case we delete all of the", sum(apply(df,1,anyNA)),"records with missing values then we are actually losing around", 100*(sum(apply(df,1,anyNA))/nrow(df)),"% of the total dataset.") 
+```
+# Data Preparation 
+
+## Address the Null Value Problem
+
+### Approach - I Deletion of All Null Values
+
+```{r}
+df.omit <- na.omit(df)
+pacman::p_load(psych,DT)
+headTail(df.omit, 10, 10) %>% datatable( rownames = FALSE, filter="top", options = list(pageLength = 21, scrollX=T))
+cat(nrow(df.omit),ncol(df.omit))
+#write.csv(df.omit,file="df.omit.csv")
+```
+
+
+
+
+### Checking For Statistical Significance Difference Pre-Post Deletion of NULL Values
+
+```{r}
+
+```
+
+
+Due to large Sample size everything starts to make sense which can be seen by the p-value. Even after it shows statistically significant difference in the dataset before and after deleting null values.
+<mark style ="background-color:#faed27">
+We tend to ignore the statistical evidence and stick to the fact that we have quite enough sample size to represent the population as a whole.
+</mark>
+
+## Recoding and Factorizing Variables
+
+
+```{r}
+str(df.omit)
+```
+
+### Identifying the Variables Requires Factorization and Recoding
+
+Factorizing 
+```{r}
+variables_recoded = c("wellbeing","SocialSupport","race","income","GeneralHealth","Asthma","HealthInsurance","CVD","LimitedActivity","Diabetes","employ","BMI","HeavyDrinker","CurrentSmoker","PhysicalActivity","marital")
+for (i in variables_recoded){
+  df.omit[,i] <- as.factor(df.omit[,i])
+}
+```
+
+Checking the Status
+```{r}
+str(df.omit)
+```
+
+### Recoding the Variables
+```{r}
+df.omit <- within(df.omit, {
+  wellbeing <- Recode(wellbeing, '"1" = "Poor_Wellbeing"; "0" = "Good_Wellbeing"', as.factor=TRUE, to.value="=", interval=":", 
+  separator=";")
+})
+df.omit <- within(df.omit, {
+  CurrentSmoker <- Recode(CurrentSmoker, '"1" = "Current Smoker"; "0" = "Not a Current Smoker"; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+df.omit <- within(df.omit, {
+  HeavyDrinker <- Recode(HeavyDrinker, '"1" = "Heavy Drinker"; "0" = "Not a Heavy Drinker"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit <- within(df.omit, {
+  HealthInsurance <- Recode(HealthInsurance , '"1" = "With Health Coverage"; "0" = "No Health Coverage"', as.factor=TRUE, to.value="=", interval=":", 
+  separator=";")
+})
+df.omit <- within(df.omit, {
+  CVD              <- Recode(CVD, '"1" = "Cardiovascular Disease"; "0" = "No Cardiovascular Disease"; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+df.omit <- within(df.omit, {
+  Diabetes        <- Recode(Diabetes, '"1" = "Diabetic"; "0" = "Non Diabetic"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit <- within(df.omit, {
+  LimitedActivity <- Recode(LimitedActivity , '"1" = "Limited"; "0" = "Not Limited"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit <- within(df.omit, {
+  PhysicalActivity <- Recode(PhysicalActivity , '"1" = "Adequate Activity"; "0" = "Low Activity"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit <- within(df.omit, {
+  employ <- Recode(employ , '"1" = "Waged Employement"; "2" = "Self-Employed";"3" = "Unemployed for more than 1 yr" ;"4" = "Unemployed for less than 1 yr";"5" = "Homemaker";"6" = "Student";"7" = "Retired";"8" = "Unable to work" ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit <- within(df.omit, {
+  BMI <- Recode(BMI , '"1" = "Low"; "2" = "Medium";"3" = "High" ;;;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df.omit$income <- recode_factor(df.omit$income, 
+                                       "1" = "less than 15000", 
+                                       "2" = "[15000-25000)", 
+                                       "3" = "[25000-35000)",
+                                       "4" = "[35000-50000)", 
+                                       "5" = "50000 or more")
+
+df.omit$Asthma <- recode_factor(df.omit$Asthma, '0' = "No", '1' = "Yes")
+
+df.omit$SocialSupport <- recode_factor(df.omit$SocialSupport, '1' = "Never", '2' = " Rarely", '3' = " Sometimes", '4' = "Usually", '5' = "Always")
+
+df.omit$race <- recode_factor(df.omit$race, '0' = "Other races", '1' = "White")
+
+df.omit$GeneralHealth <- recode_factor(df.omit$GeneralHealth, '1' = "Excellent",
+                                      '2' = "Very good",
+                                      '3' = "Good",
+                                      '4' = "Fair",
+                                      '5' = "Poor")
+
+```
+
+### Saving the Furbished File
+
+```{r}
+write.csv(df.omit,"Final_Furbished.csv",row.names = FALSE)
+```
+
+
+
+# Descriptive Analytics
+
+
+## Access the data from the furbished file
+
+```{r}
+df_final = read.csv("Final_Furbished.csv")
+```
+
+```{r}
+variables_recoded = c("wellbeing","SocialSupport","race","income","GeneralHealth","Asthma","HealthInsurance","CVD","LimitedActivity","Diabetes","employ","BMI","HeavyDrinker","CurrentSmoker","PhysicalActivity","marital")
+for (i in variables_recoded){
+  df_final[,i] <- as.factor(df_final[,i])
+}
+```
+
+```{r}
+summary(df_final)
+```
+
+
+## Checking distribution of age, asthma, social support, race, general health and income
+
+```{r}
+df_final %>%
+ggplot(aes(x = wellbeing, fill = wellbeing)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Wellbeing Distribution") + xlab("Wellbeing") + ylab("Percentage") 
+```
+
+
+```{r}
+df_final$Age_group <- ifelse(df_final$age < 25, "Age 18 to 24",ifelse(df_final$age < 35, "Age 25 to 34",ifelse(df_final$age < 45, "Age 35 to 44", ifelse(df_final$age < 55, "Age 44 to 54",ifelse(df_final$age < 65, "Age 55 to 64", "Age 65 or older")))))
+df_final %>%
+ggplot(aes(x = reorder(Age_group, Age_group, length, decreasing = FALSE), fill = Age_group, angle = 45)) +
+geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Age Group Distribution") + xlab("Age group") + ylab("Percentage") + theme(legend.position = "none",axis.text.x = element_text(angle = 45))
+```
+
+
+
+```{r}
+df_final %>%
+ggplot(aes(x = SocialSupport, fill = SocialSupport)) + geom_bar() + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Social Support Distribution") + xlab("Social Support") + ylab("Percentage")
+```
+
+```{r}
+df_final %>%
+ggplot(aes(x = income, fill = income)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Income Distribution") + xlab("Income") + ylab("Percentage") + theme(legend.position = "none",axis.text.x = element_text(angle = 45))
+```
+
+```{r}
+df_final %>%
+ggplot(aes(x = GeneralHealth, fill = GeneralHealth)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "General Health Distribution") + xlab("General Health Status") + ylab("Percentage") + theme(legend.position = "none",axis.text.x = element_text(angle = 45))
+```
+
+```{r}
+df_final %>%
+ggplot(aes(x = Asthma, fill = Asthma)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Asthma Distribution") + xlab("Asthma") + ylab("Percentage") 
+```
+
+```{r}
+df_final %>%
+ggplot(aes(x = race, fill = race)) + geom_bar(aes(y = (..count..)/sum(..count..))) + labs(title = "Race Distribution") + xlab("Race") + ylab("Percentage") 
+```
+
+
+## Bivariate analysis
+
+```{r}
+
+p1a <- df_final %>%
+ ggplot(aes(x = SocialSupport, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status on different social support level")
+p1a
+```
+
+
+```{r}
+p2 <- df_final %>%
+  ggplot(aes(x = income, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + theme(axis.text.x = element_text(angle = 30)) + labs(title = "Wellbeing status on different income status")
+p2
+```
+
+```{r}
+p3 <- df_final %>%
+  ggplot(aes(x = race, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status on different races")
+p3
+```
+
+```{r}
+p4 <- df_final %>%
+  ggplot(aes(x = Asthma, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status between people having or not Asthma")
+p4
+```
+
+```{r}
+p5 <- df_final %>%
+  ggplot(aes(x = Age_group, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status on different age group") + theme(axis.text.x = element_text(angle = 30))
+p5
+```
+
+```{r}
+p6 <- df_final %>%
+  ggplot(aes(x = GeneralHealth, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status on different general health status")
+p6 
+```
+
+```{r}
+p8 <- df_final %>%
+  ggplot(aes(x = CVD, fill = wellbeing)) + geom_bar(position = "fill") + ylab("proportion") + labs(title = "Wellbeing status on patient with and without CVD")
+p8 
+```
+
+
+## Association between Wellbeing and Race
+
+```{r}
+table(df_final$wellbeing, df_final$race)
+```
+
+
+```{r}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = race, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = race, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<br><mark style ="background-color:#faed27">
+There seems to be minimal visual difference in the percentages of the Poor and Good Wellbeing for Race Non white and Hispanic and Race White and Hispanic </mark>
+
+## Association between Wellbeing and Smoking Status
+
+```{r}
+table(df_final$wellbeing, df_final$HealthInsurance)
+```
+
+
+```{r fig.width= 10}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = HealthInsurance, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = HealthInsurance, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<mark style ="background-color:#faed27">
+From the Visual Evidence, it could be said that the Health Insurance affect the Wellbeing of an individual. It could interpreted from the graph that more proportions of individuals without Health Insurance possessing poor wellbeing as compared to those who have Health Coverage.
+</mark>
+
+
+## Association between Wellbeing and CVD
+
+```{r}
+table(df_final$wellbeing, df_final$CVD)
+```
+
+
+```{r fig.width=8}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = CVD, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = CVD, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<mark style ="background-color:#faed27">
+There seems to be visual difference in the percentages of the Poor and Good Wellbeing for poeple with and without CVD </mark>
+
+
+## Inspecting the Relation Between LimitedActivity and Wellbeing
+
+```{r}
+table(df_final$LimitedActivity, df_final$wellbeing)
+```
+
+```{r}
+ df_final %>% 
+  ggplot(aes(x = LimitedActivity , fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+df_final %>% 
+  ggplot(aes(x = LimitedActivity , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+<mark style ="background-color:#faed27">
+It could be confirmed visually that with Low Physical Activitys <b> there is a significant increase in proportion of the Poor Wellbeing of individuals</b>
+</mark>
+
+
+## Association between Wellbeing and Diabetes
+
+```{r}
+table(df_final$wellbeing, df_final$Diabetes)
+```
+
+
+```{r}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = Diabetes, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = Diabetes, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<br><mark style ="background-color:#faed27">
+There seems to be a visual difference in the percentages of the Poor and Good Wellbeing between Diabetic and Non Diabetic individuals.</mark>
+
+## Association between Wellbeing and Employment
+
+```{r}
+table(df_final$wellbeing, df_final$employ)
+```
+
+
+```{r fig.width= 8}
+ df_final %>% 
+  ggplot(aes(x = employ, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+```
+
+```{r fig.width=10}
+df_final %>% 
+  ggplot(aes(x = employ, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+
+
+<br><mark style ="background-color:#faed27">
+--> There seems to be minimal visual difference in the percentages of the Poor and Good Wellbeing for Homemaker, Retired and Waged Employment </mark><br>
+--> There is relatively higher proportions of Poor Wellbeing in students than the prior-mentioned employment groups.<br>
+--> <b>Individuals who are unable to work or are unemployed (either more than a year or less than a year) have significantly higher proportions of Poor Wellbeing than any other employment status groups.</b>
+
+## Association between Wellbeing and BMI
+
+```{r}
+table(df_final$wellbeing, df_final$BMI)
+```
+
+
+```{r fig.width= 8}
+ df_final %>% 
+  ggplot(aes(x = BMI, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+```
+
+```{r fig.width=10}
+df_final %>% 
+  ggplot(aes(x = BMI, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+
+
+<br><mark style ="background-color:#faed27">
+Individuals with higher BMI tend to have slightly higher proportions of "POOR" wellbeing. </mark>
+
+
+## Inspecting the Relation Between Poor Sleep Days and Wellbeing
+
+```{r}
+table(df_final$PoorSleepDays, df_final$wellbeing)
+```
+
+```{r}
+ df_final %>% 
+  ggplot(aes(x = PoorSleepDays , fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+df_final %>% 
+  ggplot(aes(x = PoorSleepDays , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+<mark style ="background-color:#faed27">
+It could be seen visually that with increment in the Poor Sleep days <b> there is a significant increase in the Poor Wellbeing of indivduals</b>. 
+</mark>
+
+## Inspecting the Relation Between PhysicalActivity and Wellbeing
+
+```{r}
+table(df_final$PhysicalActivity, df_final$wellbeing)
+```
+
+```{r}
+x1 = df_final %>% 
+  ggplot(aes(x = PhysicalActivity , fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+
+x2 =df_final %>% 
+  ggplot(aes(x = PhysicalActivity , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+library(patchwork)
+x1+x2
+```
+<mark style ="background-color:#faed27">
+It could be confirmed visually that with Low Physical Activitys <b> there is a significant increase in proportion of the Poor Wellbeing of individuals</b>
+</mark>
+
+
+## Association between Wellbeing and Race
+
+```{r}
+table(df_final$wellbeing, df_final$race)
+```
+
+
+```{r}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = race, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = race, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<mark style ="background-color:#faed27">
+There seems to be minimal visual difference in the percentages of the Poor and Good Wellbeing for Heavy Drinker and not a Heavy Drinker. </mark>
+
+## Association between Wellbeing and Smoking Status
+
+```{r}
+table(df_final$wellbeing, df_final$CurrentSmoker)
+```
+
+
+```{r}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = CurrentSmoker, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = CurrentSmoker, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<mark style ="background-color:#faed27">
+From the Visual Evidence, it could be said that the Smoking Status affect the Wellbeing of an individual. It could interpreted from the graph that more number of current smokers possess poor wellbeing as compared to those who are not a current smoker.
+</mark>
+
+
+## Association between Wellbeing and Heavy Drinking Habits
+
+```{r}
+table(df_final$wellbeing, df_final$HeavyDrinker)
+```
+
+
+```{r}
+rx.p1 <- df_final %>% 
+  ggplot(aes(x = HeavyDrinker, fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+rx.p2 <- df_final %>% 
+  ggplot(aes(x = HeavyDrinker, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+rx.p1 + rx.p2
+```
+<mark style ="background-color:#faed27">
+There seems to be minimal visual difference in the percentages of the Poor and Good Wellbeing for Heavy Drinker and not a Heavy Drinker. </mark>
+
+
+## Inspecting the Relation Between Poor Physical Health Days and Wellbeing
+
+```{r}
+table(df_final$PoorPhysicalHealthDays, df_final$wellbeing)
+```
+
+```{r}
+ df_final %>% 
+  ggplot(aes(x = PoorPhysicalHealthDays , fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+df_final %>% 
+  ggplot(aes(x = PoorPhysicalHealthDays , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+<mark style ="background-color:#faed27">
+It could be seen visually that with increment in the Poor Physical Health days <b> there is a significant increase in the Poor Wellbeing of indivduals</b>
+</mark>
+
+## Inspecting the Relation Between Poor Mental Health Days and Wellbeing
+
+```{r}
+table(df_final$PoorMentalHealthDays, df_final$wellbeing)
+```
+
+```{r}
+ df_final %>% 
+  ggplot(aes(x = PoorMentalHealthDays , fill = wellbeing)) + 
+  geom_bar() + 
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+df_final %>% 
+  ggplot(aes(x = PoorMentalHealthDays , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+```
+<mark style ="background-color:#faed27">
+It could be seen visually that with increment in the Poor Mental Health days <b> there is a significant increase in the Poor Wellbeing of indivduals</b>. 
+</mark>
+
+
+## Compare the increment of Poor Wellbeing in Poor Mental and Poor Physical Wellbeing
+
+```{r fig.width=10}
+r1 = df_final %>% 
+  ggplot(aes(x = PoorPhysicalHealthDays , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+r2 = df_final %>% 
+  ggplot(aes(x = PoorMentalHealthDays , fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion")
+
+library(patchwork)
+r1+r2
+```
+
+
+It is visually prominent that in both cases whenevr there is increase in the number of Poor Physical Health days or Poor Mental Health Days there seems to be almost linear increase in the Poor Wellbeing of the individuals <br>
+
+<b> This also coduld be deduced from the graph that there is a clear association between Poor Health Days (Mental or Physical) and the Wellbeing of an indivdual. </b>
+
+<br><br>
+The more interesting part to notice in here is that<mark style ="background-color:#faed27">
+The increment in proportions of "Poor Wellbeing" in the Poor Mental Health days is quite more <b> there is a significant increase in the Poor Wellbeing of indivduals</b>. 
+</mark>
+
+
+
+
+## Inspecting any presence of correlation between the Poor Physical and Poor Mental Health days
+
+```{r}
+df_final %>% ggplot(aes(x=PoorPhysicalHealthDays,y=PoorMentalHealthDays,colour =wellbeing)) + geom_point() + geom_abline(intercept=30, slope=-1)
+```
+
+Visual Representation rejects my hypothesis that there is any correlation between the Poor Physical and Poor Mental heath days.
+
+<br><br>
+1. No presence of correlation between the Poor Mental and Poor Health Days<br>
+2. If the Graph is colored based on the Well being of an individual some thing very important starts to pop up : <br>
+<b> We can visually bifurcate the presence of "Poor Wellbeing and Good Wellbeing" with a line y=-x where the upper half denotes More Poor Physical and More Poor Mental Health days where individauls have Poor Wellbeing</b> <br>
+3. The sparse distribution of points in the upper half of the line signifies relatively lesser records of individuals who have higher poor mental or physical health days.
+
+
+## Inspecting any presence of correlation between the Some College Rate and Some High School Rate in the presence of Wellbeing
+
+```{r}
+df_final %>% ggplot(aes(x=SomeCollegeRate,y=HighSchoolRate,colour = wellbeing)) + geom_point() + facet_grid(~wellbeing)
+```
+
+There is a clear presence of correlation between the two variables. That indicates that with increase in the College Rate there is parallel increment in School Rate specific to the county. 
+
+It is also evident that the distribution more or less remains the same for both wellbeings.
+
+We could reject the possibility of interaction on wellbeing on High School and Some College Rates
+
+
+## Inspecting any presence of correlation between the PM2.5 and Population Density in the presence of Wellbeing
+
+```{r}
+df_final %>% ggplot(aes(x=PM2.5,y=PopulationDensity,colour = wellbeing)) + geom_point() + facet_wrap(~wellbeing) +ylim(0,15000)
+```
+
+There is a clear presence of correlation between the two variables. That indicates with increase in the Population Density there is increment in the PM2.5 specific to the county. 
+
+It is also evident that the distribution more or less remains the same for both wellbeings.
+
+We could reject the possibility of interaction on wellbeing on High School and Some College Rates
+
+
+
+```{r}
+df_final %>% ggplot(aes(x=SomeCollegeRate,y=HighSchoolRate,colour = wellbeing)) + geom_point() + facet_grid(HeavyDrinker~wellbeing)
+
+```
+
+## Correlation between Numeric Variables   
+```{r, fig.height=10, fig.width=10}
+# library(corrplot)
+# library(sjPlot)
+rr_county <- df_final[,c(2,22:33)]
+rr_cm <- as.matrix(rr_county)
+
+corr_m <- cor(rr_cm, use="pairwise.complete.obs")
+```
+
+### Correlation Table
+```{r, fig.height=10, fig.width=10}
+# correlation matrix table
+tab_corr(rr_county,
+         na.deletion="pairwise",
+         corr.method="pearson",
+         title="Correlations with pair-wise NA deletion",
+         show.p=TRUE)
+```
+
+### Correlation Visualization
+```{r, fig.height=10, fig.width=10}
+# correlogram
+testRes <- cor.mtest(rr_cm, conf.level = 0.95)
+corrplot.mixed(corr_m,
+               upper = "ellipse",
+               p.mat = testRes$p,
+               title="Correlation Matrix of Variables of Interest")
+```
+### Highly Correlated Groups
+```{r}
+pairs.panels(df_final[, c(23:24,26,29:31)], scale = TRUE, ellipses = FALSE, pch = ".", lm = TRUE, rug = FALSE, stars = TRUE)
+```
+
+
+## Association between Wellbeing and County Variables    
+```{r, fig.height=10, fig.width=8}
+# density plots
+
+premort_wb_plot <- df_final %>% 
+  ggdensity(  x = "PrematureMortality" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25)
+
+hincome_wb_plot <- df_final %>% 
+  ggdensity(  x = "HouseholdIncome" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) + 
+  theme(legend.position="none")
+
+park_wb_plot <- df_final %>% 
+  ggdensity(  x = "ParkAccess" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="none")
+
+crime_wb_plot <- df_final %>% 
+  ggdensity(  x = "CrimeRate" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="none")
+
+unemp_wb_plot <- df_final %>% 
+  ggdensity(  x = "UnemploymentRate" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25)
+
+water_wb_plot <- df_final %>% 
+  ggdensity(  x = "WaterSafety" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="none")
+
+rec_wb_plot <- df_final %>% 
+  ggdensity(  x = "AccessToRecFacility" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="none")
+
+fastfood_wb_plot <- df_final %>% 
+  ggdensity(  x = "FastFoodPercentage" ,
+     add = "mean", rug = FALSE,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="none")
+```
+
+  
+### Premature Mortality Plots   
+```{r}
+# premature mortality
+premort_wb_plot + ggtitle("Density plot of county premature mortality by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+
+```{r}
+# county level factors won't changed based on wellbeing, which is individual
+df_final %>%
+  ggplot(aes(x=HouseholdIncome, y=PrematureMortality, group=wellbeing, color=wellbeing)) +
+  geom_point(shape=1,alpha=0.5) +
+  theme_bw() +
+  stat_smooth(method="lm", formula=y~x, geom="smooth", se=TRUE) +
+  ggtitle("Scatter Plot of County-Level Mean Household Income and\nNumber of Premature Deaths per 100,000") + 
+  facet_grid(~wellbeing)
+
+df_final %>%
+  ggplot(aes(x=HouseholdIncome, y=PrematureMortality, group=wellbeing, color=wellbeing)) +
+  geom_point(alpha=0) +
+  theme_bw() +
+  stat_smooth(method="lm", formula=y~x, geom="smooth", se=TRUE) +
+  ggtitle("Trendlines of County-Level Mean Household Income and\nNumber of Premature Deaths per 100,000") 
+```
+    
+Counties with higher mean household incomes tended to have lower premature mortality rates. This trend appears consistent across individuals who reported having good wellbeing and those that reported having poor wellbeing. 
+
+```{r}
+df_final %>%
+  ggplot(aes(x=income, y=PrematureMortality, group=income, color=income)) +
+  geom_jitter(shape=1,alpha=0.5) +
+  theme_bw() +
+  ggtitle("Jitter Plot of Individual Income Group and\nNumber of Premature Deaths per 100,000") + 
+  facet_grid(~wellbeing)
+
+df_final %>%
+  ggplot(aes(x=income, y=PrematureMortality, group=income, color=income)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("Box Plot of Individual Income Group and\nNumber of Premature Deaths per 100,000") + 
+  facet_grid(~wellbeing)
+```
+   
+   
+### Household Income Plots   
+```{r}
+hincome_wb_plot + ggtitle("Density plot of county household income by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+         
+```{r}
+df_final %>%
+  ggplot(aes(x=income, y=HouseholdIncome, group=income, color=income)) +
+  geom_jitter(shape=1,alpha=0.5) +
+  theme_bw() +
+  ggtitle("Jitter Plot of County-Level Mean Household Income and\nIndividual Income Group") + 
+  facet_grid(~wellbeing)
+
+df_final %>%
+  ggplot(aes(x=income, y=HouseholdIncome, group=income, color=income)) +
+  geom_boxplot() +
+  theme_bw() +
+  ggtitle("Box Plot of County-Level Mean Household Income and\nInividual Income Group") + 
+  facet_grid(~wellbeing)
+```
+     
+Among those with good wellbeing, there appear to be more indviduals living in counties with high household incomes.  
+
+#### Bin HouseholdIncome
+```{r}
+# bin mean household income to match individual income bins
+df_final <- df_final %>%
+  mutate(HouseholdIncome.bin = cut(HouseholdIncome, breaks=c(0, 24999, 34999, 49999, 119525)))
+
+df_final$HouseholdIncome.bin <- recode_factor(df_final$HouseholdIncome.bin, "(0,2.5e+04]" = "less than 25000", "(2.5e+04,3.5e+04]" = "[25000,35000)", "(3.5e+04,5e+04]" = "[35000,50000)","(5e+04,1.2e+05]" = "50000 or more")
+frq(df_final$HouseholdIncome.bin)
+```
+```{r}
+# create equal sized bins
+library(funModeling)
+df_final$HouseholdIncome.bin.equal <- equal_freq(var=df_final$HouseholdIncome, n_bins=5)
+frq(df_final$HouseholdIncome.bin.equal)
+```
+
+```{r}
+tab_xtab(df_final$HouseholdIncome.bin, df_final$wellbeing, show.col.prc = TRUE, show.exp = TRUE)  
+```
+
+
+```{r, fig.height=6, fig.width=8}
+# compare againt individual income
+df_final %>% 
+  group_by(HouseholdIncome.bin) %>%
+  ggplot(aes(x = income, fill = wellbeing)) + 
+  geom_bar(position = "fill") + 
+  ylab("proportion") +
+  facet_wrap(~HouseholdIncome.bin) +
+  theme(axis.text.x = element_text(angle = 45, vjust=1, hjust=1))
+```
+     
+     
+### Park Access Plots   
+```{r}
+park_wb_plot + ggtitle("Density plot of county park access by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+    
+### Crime Rate Plots   
+```{r}
+crime_wb_plot + ggtitle("Density plot of county crime rate by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+    
+### Unemployment Rate Plots   
+```{r}
+unemp_wb_plot + ggtitle("Density plot of county unemployment rate by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+    
+### Water Safety Plots   
+```{r}
+water_wb_plot + ggtitle("Density plot of Water Safety Rate by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+```{r}
+waterlog_wb_plot <- df.omit %>% 
+  mutate(WaterSafetyLog = log(WaterSafety,10)) %>%
+  filter(WaterSafetyLog >= 0) %>%
+  ggdensity(  x = "WaterSafetyLog" ,
+     color = "wellbeing", fill = "wellbeing", alpha=0.25) +
+  theme(legend.position="right")
+
+waterlog_wb_plot
+```
+    
+## Access to Recreational Facilities Plots   
+```{r}
+rec_wb_plot + ggtitle("Density plot of county recreational facility access by wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+    
+## Fast Food Percentage Plots   
+```{r}
+fastfood_wb_plot + ggtitle("Density plot of county fast food restaurant percentage\nby wellbeing") + theme(legend.position="right") + theme_bw()
+```
+    
+##### By BMI
+```{r}
+# BMI
+df.omit %>%
+  ggplot(aes(x=FastFoodPercentage, group=BMI, fill=BMI)) +
+  geom_density() +
+  facet_wrap(~BMI) +
+  theme_bw()
+```
+
+    
+##### By CVD
+```{r}
+# BMI
+df_final %>%
+  ggplot(aes(x=FastFoodPercentage, group=CVD, fill=CVD)) +
+  geom_density() +
+  facet_wrap(~CVD) +
+  theme_bw()
+```
+
+##### By General Health
+```{r}
+# BMI
+df_final %>%
+  ggplot(aes(x=FastFoodPercentage, group=GeneralHealth, fill=GeneralHealth)) +
+  geom_density() +
+  facet_wrap(~GeneralHealth) +
+  theme_bw()
+```
+
+##### By Diabetes    
+```{r}
+# BMI
+df_final %>%
+  ggplot(aes(x=FastFoodPercentage, group=Diabetes, fill=Diabetes)) +
+  geom_density() +
+  facet_wrap(~Diabetes) +
+  theme_bw()
+```
+
+## All Plots    
+```{r, fig.height=10, fig.width=8}
+multiplot(premort_wb_plot, hincome_wb_plot, park_wb_plot, crime_wb_plot, unemp_wb_plot, water_wb_plot, rec_wb_plot, fastfood_wb_plot, plotlist=NULL, cols=2)
+```
+
+
+# Logistic Regression Model (Statistical Methods)   
+## All Predictors    
+```{r}
+# set up variables 
+dependent <- "wellbeing"
+pred.all <- c("age","SocialSupport","race","income","GeneralHealth","PoorPhysicalHealthDays","PoorMentalHealthDays","Asthma","HealthInsurance","CVD","LimitedActivity","Diabetes","employ","BMI","HeavyDrinker","CurrentSmoker","PoorSleepDays","marital","PrematureMortality","HouseholdIncome","ParkAccess","CrimeRate","UnemploymentRate","WaterSafety","HighSchoolRate","SomeCollegeRate","AccessToRecFacility","FastFoodPercentage","PM2.5","PopulationDensity")
+```
+
+
+```{r}
+# initial model
+model.all <- glm(wellbeing ~ 
+                 age+
+                 SocialSupport+
+                 race+
+                 income+
+                 GeneralHealth+
+                 PoorPhysicalHealthDays+
+                 PoorMentalHealthDays+
+                 Asthma+
+                 HealthInsurance+
+                 CVD+
+                 LimitedActivity+
+                 Diabetes+
+                 employ+
+                BMI+
+                  HeavyDrinker+
+                  CurrentSmoker+
+                  PoorSleepDays+
+                  marital+
+                  PrematureMortality+
+                  HouseholdIncome+
+                  ParkAccess+
+                  CrimeRate+
+                  UnemploymentRate+
+                  WaterSafety+
+                  HighSchoolRate+
+                  SomeCollegeRate+
+                  AccessToRecFacility+
+                  FastFoodPercentage+
+                  PM2.5+
+                  PopulationDensity,
+               family=binomial(logit),
+               data=df_final)
+
+summary(model.all)
+```
+### Multicollinearity   
+#### Correlations for all numeric predictors    
+```{r, fig.height=10, fig.width=10}
+# library(corrplot)
+# library(sjPlot)
+rr_county <- df_final[,c(2,22:33)]
+rr_cm <- as.matrix(rr_county)
+
+corr_m <- cor(rr_cm, use="pairwise.complete.obs")
+```
+
+##### Correlation Table
+```{r, fig.height=10, fig.width=10}
+# correlation matrix table
+tab_corr(rr_county,
+         na.deletion="pairwise",
+         corr.method="pearson",
+         title="Correlations with pair-wise NA deletion",
+         show.p=TRUE)
+```
+
+##### Correlation Visualization
+```{r, fig.height=10, fig.width=10}
+# correlogram
+testRes <- cor.mtest(rr_cm, conf.level = 0.95)
+corrplot.mixed(corr_m,
+               upper = "ellipse",
+               p.mat = testRes$p,
+               title="Correlation Matrix of Variables of Interest")
+```
+##### Highly Correlated Groups
+```{r}
+pairs.panels(df_final[, c(23:24,26,29:31)], scale = TRUE, ellipses = FALSE, pch = ".", lm = TRUE, rug = FALSE, stars = TRUE)
+```
+
+
+#### VIF for all Predictors Model    
+```{r}
+library(car)
+library(finalfit)
+library(MASS)
+vif_all <- vif(model.all)
+vif_all <- as.data.frame(vif_all)
+```
+
+```{r}
+#create horizontal bar chart to display each VIF value
+vif_plot_all <- vif_all %>%
+  ggplot(aes(x=rownames(vif_all), y=GVIF)) +
+  geom_col(color="#434343", fill="#6BD6DB") +
+  xlab("All Predictors") +
+  ylab("VIF Values") +
+  ggtitle("VIF Values for All Predictors") +
+  geom_hline(aes(yintercept=4),color="#434343", linetype="dashed", linewidth=0.5) +
+  coord_flip()
+
+vif_plot_all
+```
+
+### Stepwise Regression   
+#### Stepwise function
+```{r}
+step <- stepAIC(model.all, direction="both") # Stepwise function
+```
+    
+#### Final Stepwise model
+```{r}
+model.step <- glm(formula= df_final$wellbeing ~ . ,
+             df_final[,(colnames(step$model[-1]))], family=binomial(logit))
+
+summary(model.step)
+```
+
+
+## Remove statistically insignificant predictors
+```{r}
+# setup variable 
+pred.m1 <- c("age","SocialSupport","race","income","GeneralHealth","PoorPhysicalHealthDays","PoorMentalHealthDays","HealthInsurance","LimitedActivity","employ","BMI","HeavyDrinker","CurrentSmoker","PoorSleepDays","marital","PrematureMortality","ParkAccess","CrimeRate","UnemploymentRate","WaterSafety","SomeCollegeRate")
+```
+
+
+```{r}
+# model with reduced predictors
+model.1 <- glm(wellbeing ~ 
+                 age+
+                 SocialSupport+
+                 race+
+                 income+
+                 GeneralHealth+
+                 PoorPhysicalHealthDays+
+                 PoorMentalHealthDays+
+                 HealthInsurance+
+                 LimitedActivity+
+                 employ+
+                 BMI+
+                  HeavyDrinker+
+                  CurrentSmoker+
+                  PoorSleepDays+
+                  marital+
+                  PrematureMortality+
+                  ParkAccess+
+                  CrimeRate+
+                  UnemploymentRate+
+                  WaterSafety+
+                  SomeCollegeRate,
+               family=binomial(logit),
+               data=df_final)
+
+summary(model.1)
+```
+       
+       
+### Multicollinearity    
+#### Correlations for all numeric predictors   
+```{r, fig.height=10, fig.width=10}
+# library(corrplot)
+# library(sjPlot)
+rr_county.m1 <- df_final[,c(2,22, 24:27,29)]
+rr_cm.m1 <- as.matrix(rr_county.m1)
+
+corr_m1 <- cor(rr_cm.m1, use="pairwise.complete.obs")
+```
+
+##### Correlation Visualization
+```{r, fig.height=10, fig.width=10}
+# correlogram
+testRes.m1 <- cor.mtest(rr_cm.m1, conf.level = 0.95)
+corrplot.mixed(corr_m1,
+               upper = "ellipse",
+               p.mat = testRes.m1$p,
+               title="Correlation Matrix of Variables of Interest")
+```
+    
+    
+#### VIF for Reduced Predictors Model    
+```{r}
+vif_1 <- vif(model.1)
+vif_1 <- as.data.frame(vif_1)
+```
+
+```{r}
+#create horizontal bar chart to display each VIF value
+vif_plot_1 <- vif_1 %>%
+  ggplot(aes(x=rownames(vif_1), y=GVIF)) +
+  geom_col(color="#434343", fill="#FFB87B") +
+  xlab("Statistically Significant Predictors") +
+  ylab("VIF Values") +
+  ggtitle("VIF Values for Reduced Model") +
+  geom_hline(aes(yintercept=4),color="#434343", linetype="dashed", linewidth=0.5) +
+  coord_flip()
+
+vif_plot_1
+```
+   
+   
+### Odds Ratios and CI of Reduced Predictors    
+```{r}
+# library(broom)
+model.1 %>%
+  tidy(conf.int=TRUE, exp=TRUE) %>%
+  datatable(rownames=FALSE,
+            colnames=c("predictor", "odds ratio", "std error", "statistic", "p-value", "CI low", "CI high"),
+            options=list(pageLength=15, scrollX=T))
+```
+
+```{r, fig.height=10, fig.width=6}
+# forest plot
+# library(finalfit)
+#df_final %>%
+ # or_plot(dependent, pred.m1)
+```
+
+
+
+
+
+# Logistic Regression Using Machine Learning
+
+## Split the Data set
+
+```{r}
+## set the seed to make your partition reproducible
+set.seed(123)
+train_index <- sample(seq_len(nrow(df_final)), size = 0.75*nrow(df_final))
+
+train <- df_final[train_index, ]
+test <- df_final[-train_index, ]
+nrow(train)
+
+```
+
+```{r}
+nrow(test)
+```
+
+
+## Train the Model
+
+```{r}
+pacman::p_load(caret)
+```
+
+```{r}
+glm_model <- train(wellbeing ~ age + SocialSupport + race + income +  GeneralHealth + PoorPhysicalHealthDays +  PoorMentalHealthDays + HealthInsurance + LimitedActivity + employ + BMI + HeavyDrinker + CurrentSmoker + PoorSleepDays + marital + PrematureMortality + ParkAccess + CrimeRate + UnemploymentRate + WaterSafety + SomeCollegeRate, data = train, method = "glm", family = "binomial")
+attributes(glm_model)
+```
+
+
+## Evaluate the Model Performance
+
+```{r}
+glm_model$metric
+```
+
+
+```{r}
+glm_model$results
+```
+
+
+## Check the Predictions on the Test Data Set
+
+```{r}
+test$pred <- glm_model %>% predict(test)
+```
+
+## evaluate the performance-define accuracy function
+
+```{r}
+accuracy_function = function(real, predicted) {
+  mean(real == predicted)
+}
+```
+
+```{r}
+accuracy_function(real = test$wellbeing,
+         predicted = test$pred)
+```
+
+## Variable Importance of the Variables Used
+
+```{r}
+ggplot(varImp(glm_model))
+```
+
+
+# CARET MODEL to predict Wellbeing
+
+
+## Library Loading 
+```{r}
+library(rattle)
+library(pROC)
+library(xgboost)
+library(randomForest)
+```
+
+## Split the Data
+```{r}
+set.seed(123)
+train_index <- sample(seq_len(nrow(df_final)), size = 0.75*nrow(df_final))
+
+train <- df_final[train_index, ]
+test <- df_final[-train_index, ]
+cat(nrow(test),nrow(train))
+```
+
+
+
+## Holdout
+
+```{r}
+levels(train$wellbeing) <- c("Good_Wellbeing", "Poor_Wellbeing")
+```
+
+
+```{r}
+trcntrl_ho<-trainControl(classProbs = TRUE,summaryFunction = twoClassSummary)
+```
+
+## CART with Auto Hyperparameter Tuning
+
+
+
+
+```{r}
+model_CART <- train(wellbeing ~ age + SocialSupport + race + income +  GeneralHealth + PoorPhysicalHealthDays +  PoorMentalHealthDays + HealthInsurance + LimitedActivity + employ + BMI + HeavyDrinker + CurrentSmoker + PoorSleepDays + marital + PrematureMortality + ParkAccess + CrimeRate + UnemploymentRate + WaterSafety + SomeCollegeRate ,                 data = train, method = "rpart",trControl=trcntrl_ho,metric="ROC",tuneLength = 10)
+model_CART$results
+```
+
+
+```{r}
+plot(model_CART)
+```
+
+
+
+## Variable Importance of the CART Model
+
+```{r}
+ggplot(varImp(model_CART))
+```
+
+
+```{r}
+print(varImp(model_CART))
+```
+
+
+## Plot the Tree
+
+```{r fig.width=15}
+plot(model_CART$finalModel, uniform=TRUE,
+     main="Classification Tree")
+text(model_CART$finalModel, all=FALSE, cex=.7)
+```
+
+
+
+```{r fig.width=15}
+# Using the Rattle Library
+library(rattle)
+fancyRpartPlot(model_CART$finalModel,cex = 0.9)
+```
+
+
+## Prediction on Test Data
+
+```{r}
+test$pred_cart <- model_CART %>% predict(test)
+```
+
+
+```{r}
+prob_cart<- model_CART %>% predict(test,type='prob')
+```
+
+```{r}
+confusionMtx=table(test$pred_cart,test$wellbeing)
+confusionMtx
+```
+
+## Create the Confusion Matrix
+
+```{r}
+TP=confusionMtx[1,1]
+FP=confusionMtx[1,2]
+TN=confusionMtx[2,2]
+FN=confusionMtx[2,1]  
+TP
+```
+### Calcaulating Recall
+
+```{r}
+recall=TP/(TP+FN)
+recall
+```
+### Calcualting Accuracy
+
+```{r}
+Accuracy=(TP+TN)/nrow(test)
+Accuracy
+```
+### Calacualting Specificity
+```{r}
+specificity=TN/(TN+FP)
+specificity
+```
+
+### Calculate Precision
+```{r}
+precision=TP/(TP+FP)
+precision
+```
+### Calculate F1-score
+```{r}
+F1=(2*recall*precision)/(recall+precision)
+F1
+```
+```{r}
+str(prob_cart)
+```
+
+```{r}
+CART.roc=roc(predictor=prob_cart$Good_Wellbeing,response=test$wellbeing,
+             levels=levels(test$wellbeing))
+```
+
+```{r}
+CART.roc
+
+```
+
+```{r}
+ggroc(CART.roc, alpha = 0.5, colour = "red", linetype = 2, size =0.7 )
+```
+
+
+
+
+
