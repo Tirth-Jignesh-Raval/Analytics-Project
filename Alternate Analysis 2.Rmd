@@ -1,0 +1,441 @@
+---
+title: "Analytics Project - Wellbeing Data Set"
+subtitle: "C755: Analytics & Decision-Making in Healthcare"
+author:
+  name: Tirth Raval
+  affiliation: C755 | DeGroote School of Business, McMaster University
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: 
+    number_sections: FALSE
+    code_folding: hide
+    toc: yes
+    toc_float: 
+      toc_collapsed: true
+    theme: readable
+    warning: false
+---
+# Load the Libraries 
+
+```{r}
+pacman::p_load(psych, xray , ggplot2, texreg, DT, wrapr, dplyr,
+               sjmisc, sjlabelled, sjstats, sjPlot, tidyr,ggpubr,corrplot,
+               knitr, kableExtra, captioner, car, excelR,ggcorrplot,Rmisc,sjmisc,funModeling,
+               forcats, hrbrthemes,tidyverse,finalfit,patchwork,GGally,broom,caret,matrixTests,PerformanceAnalytics)
+
+
+
+```  
+
+
+# Connect the Dataset
+```{r}
+df = read.csv("Well_being_Health_Behavior_Environmental_Fact.csv")
+```
+
+```{r}
+str(df)
+```
+
+
+```{r}
+variables_recoded = c("wellbeing","SocialSupport","race","income","GeneralHealth","Asthma","HealthInsurance","CVD","LimitedActivity","Diabetes","employ","BMI","HeavyDrinker","CurrentSmoker","PhysicalActivity","marital")
+for (i in variables_recoded){
+  df[,i] <- as.factor(df[,i])
+}
+```
+
+
+# Recoding the Variables
+```{r}
+df <- within(df, {
+  wellbeing <- Recode(wellbeing, '"1" = "Poor_Wellbeing"; "0" = "Good_Wellbeing"', as.factor=TRUE, to.value="=", interval=":", 
+  separator=";")
+})
+df <- within(df, {
+  CurrentSmoker <- Recode(CurrentSmoker, '"1" = "Current Smoker"; "0" = "Not a Current Smoker"; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+df <- within(df, {
+  HeavyDrinker <- Recode(HeavyDrinker, '"1" = "Heavy Drinker"; "0" = "Not a Heavy Drinker"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df <- within(df, {
+  HealthInsurance <- Recode(HealthInsurance , '"1" = "With Health Coverage"; "0" = "No Health Coverage"', as.factor=TRUE, to.value="=", interval=":", 
+  separator=";")
+})
+df <- within(df, {
+  CVD              <- Recode(CVD, '"1" = "Cardiovascular Disease"; "0" = "No Cardiovascular Disease"; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+df <- within(df, {
+  Diabetes        <- Recode(Diabetes, '"1" = "Diabetic"; "0" = "Non Diabetic"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df <- within(df, {
+  LimitedActivity <- Recode(LimitedActivity , '"1" = "Limited"; "0" = "Not Limited"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df <- within(df, {
+  PhysicalActivity <- Recode(PhysicalActivity , '"1" = "Adequate Activity"; "0" = "Low Activity"; ; ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df <- within(df, {
+  employ <- Recode(employ , '"1" = "Waged Employement"; "2" = "Self-Employed";"3" = "Unemployed for more than 1 yr" ;"4" = "Unemployed for less than 1 yr";"5" = "Homemaker";"6" = "Student";"7" = "Retired";"8" = "Unable to work" ;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df <- within(df, {
+  BMI <- Recode(BMI , '"1" = "Low"; "2" = "Medium";"3" = "High" ;;;', as.factor=TRUE, to.value="=", 
+  interval=":", separator=";")
+})
+
+df$income <- recode_factor(df$income, 
+                                       "1" = "less than 15000", 
+                                       "2" = "[15000-25000)", 
+                                       "3" = "[25000-35000)",
+                                       "4" = "[35000-50000)", 
+                                       "5" = "50000 or more")
+
+df$Asthma <- recode_factor(df$Asthma, '0' = "No", '1' = "Yes")
+
+df$SocialSupport <- recode_factor(df$SocialSupport, '1' = "Never", '2' = " Rarely", '3' = " Sometimes", '4' = "Usually", '5' = "Always")
+
+df$race <- recode_factor(df$race, '0' = "Other races", '1' = "White")
+
+df$GeneralHealth <- recode_factor(df$GeneralHealth, '1' = "Excellent",
+                                      '2' = "Very good",
+                                      '3' = "Good",
+                                      '4' = "Fair",
+                                      '5' = "Poor")
+
+```
+
+# Interested Significant Predictors
+```{r}
+interested = c("wellbeing","SocialSupport", "GeneralHealth","PoorMentalHealthDays", "LimitedActivity", "employ")
+
+df_interested = df[,interested]
+```
+
+
+
+# Interest and only omit values from significant predictors than the whole dataset
+```{r}
+df_interested <- na.omit(df_interested)
+pacman::p_load(psych,DT)
+headTail(df_interested, 10, 10) %>% datatable( rownames = FALSE, filter="top", options = list(pageLength = 21, scrollX=T))
+cat(nrow(df_interested),ncol(df_interested))
+```
+
+# Logistic Regression Using Machine Learning
+
+## Split the Data set
+
+```{r}
+## set the seed to make your partition reproducible
+set.seed(123)
+train_index <- sample(seq_len(nrow(df_interested)), size = 0.75*nrow(df_interested))
+
+train <- df_interested[train_index, ]
+test <- df_interested[-train_index, ]
+nrow(train)
+
+```
+
+```{r}
+nrow(test)
+```
+
+
+## Train the Model
+
+```{r}
+pacman::p_load(caret)
+```
+
+```{r}
+glm_model <- train(wellbeing ~ SocialSupport+ GeneralHealth+PoorMentalHealthDays +LimitedActivity + employ, data = train, method = "glm", family = "binomial")
+attributes(glm_model)
+```
+
+
+## Evaluate the Model Performance
+
+```{r}
+glm_model$metric
+```
+
+
+```{r}
+glm_model$results
+```
+
+
+## Check the Predictions on the Test Data Set
+
+```{r}
+test$pred <- glm_model %>% predict(test)
+```
+
+## evaluate the performance-define accuracy function
+
+```{r}
+accuracy_function = function(real, predicted) {
+  mean(real == predicted)
+}
+```
+
+```{r}
+accuracy_function(real = test$wellbeing,
+         predicted = test$pred)
+```
+
+## Variable Importance of the Variables Used
+
+```{r}
+ggplot(varImp(glm_model))
+```
+
+## Performance Metrics for Log Reg ML Model
+```{r}
+confusionMtx_logreg = table(test$pred,test$wellbeing)
+confusionMtx_logreg
+```
+### Create the Confusion Matrix for Log Reg
+
+```{r}
+TP_logreg=confusionMtx_logreg[1,1]
+FP_logreg=confusionMtx_logreg[1,2]
+TN_logreg=confusionMtx_logreg[2,2]
+FN_logreg=confusionMtx_logreg[2,1]  
+TP_logreg
+```
+### Calcaulating Recall
+
+```{r}
+recall_logreg=TP_logreg/(TP_logreg+FN_logreg)
+recall_logreg
+```
+### Calcualting Accuracy
+
+```{r}
+Accuracy_logreg=(TP_logreg+TN_logreg)/nrow(test)
+Accuracy_logreg
+```
+### Calacualting Specificity
+```{r}
+specificity_logreg=TN_logreg/(TN_logreg+FP_logreg)
+specificity_logreg
+```
+
+### Calculate Precision
+```{r}
+precision_logreg=TP_logreg/(TP_logreg+FP_logreg)
+precision_logreg
+```
+### Calculate F1-score
+```{r}
+F1_logreg=(2*recall_logreg*precision_logreg)/(recall_logreg+precision_logreg)
+F1_logreg
+```
+### ROC for Log Reg ML Model   
+```{r "retrieve probabilities of log reg ML model for ROC"}
+# retrieve probabilities
+prob_logreg<- glm_model %>% predict(test,type='prob')
+```
+```{r}
+str(prob_logreg)
+```
+
+```{r "create logreg ML model roc"}
+logreg.roc=roc(predictor=prob_logreg$Good_Wellbeing,response=test$wellbeing,
+             levels=levels(test$wellbeing))
+```
+
+```{r}
+logreg.roc
+```
+
+```{r "plot log reg ML model roc curve"}
+ggroc(logreg.roc, alpha = 1, colour = "red", linetype = 1, size =0.7 ) +
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="black", linetype="dashed") + 
+  ggtitle("ROC Curve for Logistic Regression ML Model") +
+  xlab("1 - specificity") +
+  ylab("sensitivity") +
+  annotate(geom="text", x=0.7, y=0.75, label="Log Reg Model classifier", color="red") +  
+  annotate(geom="text", x=0.45, y=0.4, label="random classifier") +
+  annotate(geom="text", x=0.1, y=0.05, label="AUC = 0.9048", color="darkred") +
+  theme_bw()
+```
+     
+     
+
+# CARET MODEL to predict Wellbeing
+
+
+## Library Loading 
+```{r}
+library(rattle)
+library(pROC)
+library(xgboost)
+library(randomForest)
+```
+
+## Split the Data
+```{r}
+set.seed(123)
+train_index <- sample(seq_len(nrow(df_interested)), size = 0.75*nrow(df_interested))
+
+train <- df_interested[train_index, ]
+test <- df_interested[-train_index, ]
+cat(nrow(test),nrow(train))
+```
+
+
+
+## Holdout
+
+```{r}
+levels(train$wellbeing) <- c("Good_Wellbeing", "Poor_Wellbeing")
+```
+
+
+```{r}
+trcntrl_ho<-trainControl(classProbs = TRUE,summaryFunction = twoClassSummary)
+```
+
+## CART with Auto Hyperparameter Tuning
+
+
+
+
+```{r}
+model_CART <- train(wellbeing ~ SocialSupport+ GeneralHealth+PoorMentalHealthDays +LimitedActivity + employ,                 data = train, method = "rpart",trControl=trcntrl_ho,metric="ROC",tuneLength = 10)
+model_CART$results
+```
+
+
+```{r}
+plot(model_CART)
+```
+
+
+
+## Variable Importance of the CART Model
+
+```{r}
+ggplot(varImp(model_CART))
+```
+
+
+```{r}
+print(varImp(model_CART))
+```
+
+
+## Plot the Tree
+
+```{r fig.width=15}
+plot(model_CART$finalModel, uniform=TRUE,
+     main="Classification Tree")
+text(model_CART$finalModel, all=FALSE, cex=.7)
+```
+
+
+
+```{r fig.width=15}
+# Using the Rattle Library
+library(rattle)
+fancyRpartPlot(model_CART$finalModel,cex = 0.9)
+```
+
+
+## Prediction on Test Data
+
+```{r}
+test$pred_cart <- model_CART %>% predict(test)
+```
+
+
+```{r}
+prob_cart<- model_CART %>% predict(test,type='prob')
+```
+
+```{r}
+confusionMtx=table(test$pred_cart,test$wellbeing)
+confusionMtx
+```
+
+## Create the Confusion Matrix
+
+```{r}
+TP=confusionMtx[1,1]
+FP=confusionMtx[1,2]
+TN=confusionMtx[2,2]
+FN=confusionMtx[2,1]  
+TP
+```
+### Calcaulating Recall
+
+```{r}
+recall=TP/(TP+FN)
+recall
+```
+### Calcualting Accuracy
+
+```{r}
+Accuracy=(TP+TN)/nrow(test)
+Accuracy
+```
+### Calacualting Specificity
+```{r}
+specificity=TN/(TN+FP)
+specificity
+```
+
+### Calculate Precision
+```{r}
+precision=TP/(TP+FP)
+precision
+```
+### Calculate F1-score
+```{r}
+F1=(2*recall*precision)/(recall+precision)
+F1
+```
+```{r}
+str(prob_cart)
+```
+
+```{r}
+CART.roc=roc(predictor=prob_cart$Good_Wellbeing,response=test$wellbeing,
+             levels=levels(test$wellbeing))
+```
+
+```{r}
+CART.roc
+
+```
+
+```{r}
+ggroc(CART.roc, alpha = 0.5, colour = "red", linetype = 2, size =0.7 )
+```
+
+
+```{r "plot CART ROC"}
+ggroc(CART.roc, alpha = 1, colour = "red", linetype = 1, size =0.7 ) +
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="black", linetype="dashed") + 
+  ggtitle("ROC Curve for CART Model") +
+  xlab("1 - specificity") +
+  ylab("sensitivity") +
+  annotate(geom="text", x=0.7, y=0.75, label="CART Model classifier", color="red") +  
+  annotate(geom="text", x=0.45, y=0.4, label="random classifier") +
+  annotate(geom="text", x=0.1, y=0.05, label="AUC = 0.7415", color="darkred") +
+  theme_bw()
+```
+
